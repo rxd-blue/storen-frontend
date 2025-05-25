@@ -53,8 +53,30 @@ function applyFilters(filter) {
   products.forEach(product => {
     const matchesCategory = !filter.category || product.dataset.category === filter.category;
     const matchesBrand = !filter.brand || product.dataset.brand === filter.brand;
-    product.style.display = matchesCategory && matchesBrand ? 'block' : 'none';
+    
+    if (matchesCategory && matchesBrand) {
+      product.style.display = 'block';
+      product.style.opacity = '1';
+      product.style.transform = 'translateY(0)';
+    } else {
+      product.style.opacity = '0';
+      product.style.transform = 'translateY(20px)';
+      setTimeout(() => {
+        product.style.display = 'none';
+      }, 300);
+    }
   });
+  
+  // Update filter UI
+  if (categoryFilter) categoryFilter.value = filter.category || '';
+  if (brandFilter) brandFilter.value = filter.brand || '';
+  
+  // Show feedback to user
+  const feedbackMsg = document.createElement('div');
+  feedbackMsg.className = 'filter-feedback';
+  feedbackMsg.textContent = `تم تطبيق الفلتر: ${filter.category || 'كل الفئات'} - ${filter.brand || 'كل الماركات'}`;
+  document.body.appendChild(feedbackMsg);
+  setTimeout(() => feedbackMsg.remove(), 3000);
 }
 
 // Cart Functions
@@ -157,16 +179,32 @@ let lastFilter = {};
 async function pollFilters() {
   try {
     const response = await fetch(`${API_URL}/filter`);
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`);
+    }
     const filter = await response.json();
     
     if (JSON.stringify(filter) !== JSON.stringify(lastFilter)) {
+      console.log('New filter received:', filter);
       lastFilter = filter;
-      if (categoryFilter) categoryFilter.value = filter.category || '';
-      if (brandFilter) brandFilter.value = filter.brand || '';
       applyFilters(filter);
+      
+      // Show success indicator
+      const indicator = document.createElement('div');
+      indicator.className = 'sync-indicator success';
+      indicator.textContent = '✓ تم التحديث';
+      document.body.appendChild(indicator);
+      setTimeout(() => indicator.remove(), 2000);
     }
   } catch (error) {
     console.error('Error polling filters:', error);
+    
+    // Show error indicator
+    const indicator = document.createElement('div');
+    indicator.className = 'sync-indicator error';
+    indicator.textContent = '× خطأ في الاتصال';
+    document.body.appendChild(indicator);
+    setTimeout(() => indicator.remove(), 2000);
   }
 }
 

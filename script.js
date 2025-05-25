@@ -1,5 +1,5 @@
 // API Configuration
-const API_URL = 'https://your-api.onrender.com/api';
+const API_URL = 'https://special-catnip-hawthorn.glitch.me/api';
 
 // Cache DOM elements
 const categoryFilter = document.getElementById('categoryFilter');

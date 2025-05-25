@@ -17,9 +17,11 @@ if (categoryFilter && brandFilter) {
 document.addEventListener('DOMContentLoaded', () => {
   if (window.location.pathname.includes('cart.html')) {
     loadCart();
+    startCartPolling(); // Start polling cart in cart page
   } else {
     checkCartAndRedirect();
     startFilterPolling();
+    startCartPolling(); // Start polling cart in main page
   }
 });
 
@@ -96,36 +98,51 @@ async function addToCart(button) {
       body: JSON.stringify(item)
     });
     
-    alert('✅ تم إضافة المنتج للعربة');
+    showNotification('✅ تم إضافة المنتج للعربة');
   } catch (error) {
     console.error('Error adding to cart:', error);
-    alert('❌ حدث خطأ أثناء الإضافة للعربة');
+    showNotification('❌ حدث خطأ أثناء الإضافة للعربة', 'error');
   }
+}
+
+function showNotification(message, type = 'success') {
+  const notification = document.createElement('div');
+  notification.className = `notification ${type}`;
+  notification.textContent = message;
+  document.body.appendChild(notification);
+  setTimeout(() => notification.remove(), 3000);
 }
 
 async function loadCart() {
   try {
     const response = await fetch(`${API_URL}/cart`);
     const items = await response.json();
-    
-    if (!items.length) {
-      cartItems.innerHTML = '<p class="empty-cart">العربة فارغة</p>';
-      return;
-    }
-
-    cartItems.innerHTML = items.map(item => `
-      <div class="cart-item">
-        <div>
-          <h3>${item.name}</h3>
-          <p>${item.details || ''}</p>
-        </div>
-        <button onclick="removeFromCart('${item.name}')" class="remove-btn">حذف</button>
-      </div>
-    `).join('');
+    updateCartDisplay(items);
   } catch (error) {
     console.error('Error loading cart:', error);
-    cartItems.innerHTML = '<p class="error">حدث خطأ أثناء تحميل العربة</p>';
+    if (cartItems) {
+      cartItems.innerHTML = '<p class="error">حدث خطأ أثناء تحميل العربة</p>';
+    }
   }
+}
+
+function updateCartDisplay(items) {
+  if (!cartItems) return; // Guard clause if not in cart page
+  
+  if (!items.length) {
+    cartItems.innerHTML = '<p class="empty-cart">العربة فارغة</p>';
+    return;
+  }
+
+  cartItems.innerHTML = items.map(item => `
+    <div class="cart-item">
+      <div>
+        <h3>${item.name}</h3>
+        <p>${item.details || ''}</p>
+      </div>
+      <button onclick="removeFromCart('${item.name}')" class="remove-btn">حذف</button>
+    </div>
+  `).join('');
 }
 
 async function removeFromCart(productName) {
@@ -142,10 +159,11 @@ async function removeFromCart(productName) {
       body: JSON.stringify(updatedItems)
     });
     
+    showNotification('✅ تم حذف المنتج من العربة');
     loadCart();
   } catch (error) {
     console.error('Error removing from cart:', error);
-    alert('❌ حدث خطأ أثناء حذف المنتج');
+    showNotification('❌ حدث خطأ أثناء حذف المنتج', 'error');
   }
 }
 
@@ -154,11 +172,13 @@ async function completePurchase() {
     await fetch(`${API_URL}/cart/reset`, {
       method: 'POST'
     });
-    alert('✅ تم إتمام عملية الشراء بنجاح!');
-    window.location.href = 'index.html';
+    showNotification('✅ تم إتمام عملية الشراء بنجاح!');
+    setTimeout(() => {
+      window.location.href = 'index.html';
+    }, 1000);
   } catch (error) {
     console.error('Error completing purchase:', error);
-    alert('❌ حدث خطأ أثناء إتمام عملية الشراء');
+    showNotification('❌ حدث خطأ أثناء إتمام عملية الشراء', 'error');
   }
 }
 
@@ -188,26 +208,49 @@ async function pollFilters() {
       console.log('New filter received:', filter);
       lastFilter = filter;
       applyFilters(filter);
-      
-      // Show success indicator
-      const indicator = document.createElement('div');
-      indicator.className = 'sync-indicator success';
-      indicator.textContent = '✓ تم التحديث';
-      document.body.appendChild(indicator);
-      setTimeout(() => indicator.remove(), 2000);
     }
   } catch (error) {
     console.error('Error polling filters:', error);
-    
-    // Show error indicator
-    const indicator = document.createElement('div');
-    indicator.className = 'sync-indicator error';
-    indicator.textContent = '× خطأ في الاتصال';
-    document.body.appendChild(indicator);
-    setTimeout(() => indicator.remove(), 2000);
   }
 }
 
 function startFilterPolling() {
   setInterval(pollFilters, 2000);
+}
+
+// Add cart polling function
+function startCartPolling() {
+  setInterval(async () => {
+    try {
+      const response = await fetch(`${API_URL}/cart`);
+      if (!response.ok) throw new Error('Cart fetch failed');
+      const items = await response.json();
+      
+      // If we're in cart page, update the display
+      if (window.location.pathname.includes('cart.html')) {
+        updateCartDisplay(items);
+      } else {
+        // If in main page, show notification for new items
+        if (items.length > 0) {
+          updateCartBadge(items.length);
+        }
+      }
+    } catch (error) {
+      console.error('Error polling cart:', error);
+    }
+  }, 2000);
+}
+
+function updateCartBadge(itemCount) {
+  let badge = document.querySelector('.cart-badge');
+  if (!badge) {
+    badge = document.createElement('div');
+    badge.className = 'cart-badge';
+    const cartLink = document.querySelector('.cart-link');
+    if (cartLink) {
+      cartLink.appendChild(badge);
+    }
+  }
+  badge.textContent = itemCount;
+  badge.style.display = itemCount > 0 ? 'block' : 'none';
 } 

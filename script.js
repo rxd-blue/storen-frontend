@@ -90,7 +90,7 @@ async function addToCart(button) {
   };
 
   try {
-    await fetch(`${API_URL}/cart/add`, {
+    const response = await fetch(`${API_URL}/cart/add`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json'
@@ -98,7 +98,16 @@ async function addToCart(button) {
       body: JSON.stringify(item)
     });
     
-    showNotification('✅ تم إضافة المنتج للعربة');
+    if (response.ok) {
+      showNotification('✅ تم إضافة المنتج للعربة');
+      // Wait for the notification to be visible
+      setTimeout(() => {
+        // Redirect to cart page
+        window.location.href = 'cart.html';
+      }, 1000);
+    } else {
+      throw new Error('Failed to add to cart');
+    }
   } catch (error) {
     console.error('Error adding to cart:', error);
     showNotification('❌ حدث خطأ أثناء الإضافة للعربة', 'error');

@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html lang="ar">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>منتجاتنا</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header>
+    <h1>📦 المنتجات</h1>
+    <a href="cart.html" class="cart-link">🛒 الذهاب إلى عربة الشراء</a>
+  </header>
+
+  <main>
+    <div class="filters">
+      <select id="categoryFilter">
+        <option value="">كل الفئات</option>
+        <option value="تليفونات">تليفونات</option>
+        <option value="غسالات">غسالات</option>
+      </select>
+      <select id="brandFilter">
+        <option value="">كل الماركات</option>
+        <option value="سامسونج">سامسونج</option>
+        <option value="شاومي">شاومي</option>
+        <option value="LG">LG</option>
+      </select>
+    </div>
+
+    <div class="products-grid">
+      <div class="product" data-category="تليفونات" data-brand="سامسونج">
+        <h3>Samsung A23</h3>
+        <p>هاتف ذكي بشاشة 6.6 بوصة</p>
+        <button onclick="addToCart(this)">أضف للعربة</button>
+      </div>
+      <div class="product" data-category="تليفونات" data-brand="شاومي">
+        <h3>Xiaomi Note 12</h3>
+        <p>هاتف ذكي بشاشة 6.67 بوصة</p>
+        <button onclick="addToCart(this)">أضف للعربة</button>
+      </div>
+      <div class="product" data-category="غسالات" data-brand="LG">
+        <h3>LG WashPro</h3>
+        <p>غسالة أوتوماتيك 9 كجم</p>
+        <button onclick="addToCart(this)">أضف للعربة</button>
+      </div>
+      <div class="product" data-category="غسالات" data-brand="سامسونج">
+        <h3>Samsung WashX</h3>
+        <p>غسالة أوتوماتيك 8 كجم</p>
+        <button onclick="addToCart(this)">أضف للعربة</button>
+      </div>
+    </div>
+  </main>
+
+  <script src="script.js"></script>
+</body>
+</html> 

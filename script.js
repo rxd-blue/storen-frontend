@@ -14,12 +14,12 @@ const closeCart = document.getElementById('closeCart');
 
 // Event Listeners
 if (categoryFilter && brandFilter) {
-  categoryFilter.addEventListener('change', updateFilters);
-  brandFilter.addEventListener('change', updateFilters);
+  categoryFilter.addEventListener('change', () => handleFilterChange('category'));
+  brandFilter.addEventListener('change', () => handleFilterChange('brand'));
 }
 
 cartToggle.addEventListener('click', () => {
-  openCart();
+  toggleCart();
 });
 
 closeCart.addEventListener('click', closeCartMenu);
@@ -35,6 +35,14 @@ document.addEventListener('DOMContentLoaded', () => {
 });
 
 // Cart Functions
+function toggleCart() {
+  if (cartMenu.classList.contains('active')) {
+    closeCartMenu();
+  } else {
+    openCart();
+  }
+}
+
 function openCart() {
   cartMenu.classList.add('active');
   cartOverlay.classList.add('active');
@@ -70,6 +78,43 @@ function displayProducts(products) {
   `).join('');
 }
 
+// Filter Functions
+async function handleFilterChange(filterType) {
+  const filter = {
+    category: categoryFilter.value,
+    brand: brandFilter.value
+  };
+
+  try {
+    // Send filter to API
+    const filterResponse = await fetch(`${API_URL}/filter`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify(filter)
+    });
+
+    if (!filterResponse.ok) {
+      throw new Error('Failed to send filter');
+    }
+
+    // Fetch filtered products
+    const productsResponse = await fetch(`${API_URL}/products?category=${filter.category}&brand=${filter.brand}`);
+    if (!productsResponse.ok) {
+      throw new Error('Failed to fetch filtered products');
+    }
+
+    const products = await productsResponse.json();
+    displayProducts(products);
+    
+    showNotification(`✅ تم تطبيق الفلتر: ${filterType === 'category' ? 'الفئة' : 'الماركة'}`);
+  } catch (error) {
+    console.error('Error applying filter:', error);
+    showNotification('❌ حدث خطأ أثناء تطبيق الفلتر', 'error');
+  }
+}
+
 async function addToCart(button) {
   const product = button.closest('.product');
   const item = {
@@ -92,6 +137,14 @@ async function addToCart(button) {
     if (!response.ok) {
       throw new Error('Failed to add to cart');
     }
+
+    // Animate the button
+    button.disabled = true;
+    button.textContent = '✓ تمت الإضافة';
+    setTimeout(() => {
+      button.disabled = false;
+      button.textContent = 'أضف للعربة';
+    }, 2000);
 
     showNotification('✅ تم إضافة المنتج للعربة');
     await loadCart(); // Refresh cart display
@@ -142,39 +195,6 @@ function updateCartCount(count) {
   if (cartToggle) cartToggle.style.display = count > 0 ? 'flex' : 'none';
 }
 
-// Filter Functions
-async function updateFilters() {
-  const filter = {
-    category: categoryFilter.value,
-    brand: brandFilter.value
-  };
-  
-  try {
-    await sendFiltersToAPI(filter);
-    const response = await fetch(`${API_URL}/products`);
-    if (!response.ok) throw new Error('Failed to fetch filtered products');
-    const products = await response.json();
-    displayProducts(products);
-  } catch (error) {
-    console.error('Error updating filters:', error);
-    showNotification('❌ حدث خطأ أثناء تطبيق الفلتر', 'error');
-  }
-}
-
-async function sendFiltersToAPI(filter) {
-  const response = await fetch(`${API_URL}/filter`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json'
-    },
-    body: JSON.stringify(filter)
-  });
-  
-  if (!response.ok) {
-    throw new Error('Failed to send filters');
-  }
-}
-
 // Polling Functions
 function startFilterPolling() {
   setInterval(async () => {
@@ -191,9 +211,13 @@ function startFilterPolling() {
       const filter = await filterResponse.json();
       const products = await productsResponse.json();
 
-      // Update filter UI
-      if (categoryFilter) categoryFilter.value = filter.category || '';
-      if (brandFilter) brandFilter.value = filter.brand || '';
+      // Update filter UI without triggering change event
+      if (categoryFilter && categoryFilter.value !== filter.category) {
+        categoryFilter.value = filter.category || '';
+      }
+      if (brandFilter && brandFilter.value !== filter.brand) {
+        brandFilter.value = filter.brand || '';
+      }
 
       // Update products display
       displayProducts(products);

@@ -12,26 +12,26 @@ const cartCount = document.getElementById('cartCount');
 const cartToggle = document.getElementById('cartToggle');
 const closeCart = document.getElementById('closeCart');
 
+let currentFilter = {
+  category: '',
+  brand: ''
+};
+
 // Event Listeners
 if (categoryFilter && brandFilter) {
-  categoryFilter.addEventListener('change', () => handleFilterChange('category'));
-  brandFilter.addEventListener('change', () => handleFilterChange('brand'));
+  categoryFilter.addEventListener('change', () => handleFilterChange());
+  brandFilter.addEventListener('change', () => handleFilterChange());
 }
 
-cartToggle.addEventListener('click', () => {
-  toggleCart();
-});
-
+cartToggle.addEventListener('click', toggleCart);
 closeCart.addEventListener('click', closeCartMenu);
 cartOverlay.addEventListener('click', closeCartMenu);
 document.getElementById('completePurchase').addEventListener('click', completePurchase);
 
 // Initialize the page
-document.addEventListener('DOMContentLoaded', () => {
-  loadInitialProducts();
-  startFilterPolling();
+document.addEventListener('DOMContentLoaded', async () => {
+  await loadInitialProducts();
   startCartPolling();
-  loadCart(); // Initial cart load
 });
 
 // Cart Functions
@@ -56,12 +56,9 @@ function closeCartMenu() {
 
 async function loadInitialProducts() {
   try {
-    const response = await fetch(`${API_URL}/products`);
-    if (!response.ok) throw new Error('Failed to fetch products');
-    const products = await response.json();
-    displayProducts(products);
+    await handleFilterChange(); // This will load products with current filters
   } catch (error) {
-    console.error('Error loading products:', error);
+    console.error('Error loading initial products:', error);
     showNotification('❌ حدث خطأ أثناء تحميل المنتجات', 'error');
   }
 }
@@ -69,30 +66,42 @@ async function loadInitialProducts() {
 function displayProducts(products) {
   if (!productsGrid) return;
   
+  if (!Array.isArray(products) || products.length === 0) {
+    productsGrid.innerHTML = '<p class="no-products">لا توجد منتجات متاحة</p>';
+    return;
+  }
+
   productsGrid.innerHTML = products.map(product => `
     <div class="product" data-category="${product.category || ''}" data-brand="${product.brand || ''}">
       <h3>${product.name}</h3>
       <p>${product.details || ''}</p>
-      <button onclick="addToCart(this)">أضف للعربة</button>
+      <button onclick="addToCart(this)" class="add-to-cart-btn">أضف للعربة</button>
     </div>
   `).join('');
 }
 
 // Filter Functions
-async function handleFilterChange(filterType) {
-  const filter = {
-    category: categoryFilter.value,
-    brand: brandFilter.value
-  };
-
+async function handleFilterChange() {
   try {
+    const newFilter = {
+      category: categoryFilter.value,
+      brand: brandFilter.value
+    };
+
+    // Only proceed if filters have actually changed
+    if (JSON.stringify(newFilter) === JSON.stringify(currentFilter)) {
+      return;
+    }
+
+    currentFilter = newFilter;
+
     // Send filter to API
     const filterResponse = await fetch(`${API_URL}/filter`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json'
       },
-      body: JSON.stringify(filter)
+      body: JSON.stringify(newFilter)
     });
 
     if (!filterResponse.ok) {
@@ -100,15 +109,22 @@ async function handleFilterChange(filterType) {
     }
 
     // Fetch filtered products
-    const productsResponse = await fetch(`${API_URL}/products?category=${filter.category}&brand=${filter.brand}`);
+    const productsResponse = await fetch(`${API_URL}/products`);
     if (!productsResponse.ok) {
       throw new Error('Failed to fetch filtered products');
     }
 
     const products = await productsResponse.json();
-    displayProducts(products);
     
-    showNotification(`✅ تم تطبيق الفلتر: ${filterType === 'category' ? 'الفئة' : 'الماركة'}`);
+    // Filter products on client side as well
+    const filteredProducts = products.filter(product => {
+      const matchesCategory = !newFilter.category || product.category === newFilter.category;
+      const matchesBrand = !newFilter.brand || product.brand === newFilter.brand;
+      return matchesCategory && matchesBrand;
+    });
+
+    displayProducts(filteredProducts);
+    showNotification('✅ تم تطبيق الفلتر بنجاح');
   } catch (error) {
     console.error('Error applying filter:', error);
     showNotification('❌ حدث خطأ أثناء تطبيق الفلتر', 'error');
@@ -116,6 +132,11 @@ async function handleFilterChange(filterType) {
 }
 
 async function addToCart(button) {
+  // Disable the button immediately to prevent double clicks
+  button.disabled = true;
+  const originalText = button.textContent;
+  button.textContent = 'جاري الإضافة...';
+
   const product = button.closest('.product');
   const item = {
     name: product.querySelector('h3').textContent,
@@ -123,9 +144,6 @@ async function addToCart(button) {
   };
 
   try {
-    // Show cart menu immediately
-    openCart();
-
     const response = await fetch(`${API_URL}/cart/add`, {
       method: 'POST',
       headers: {
@@ -138,21 +156,31 @@ async function addToCart(button) {
       throw new Error('Failed to add to cart');
     }
 
-    // Animate the button
-    button.disabled = true;
+    // Show success state
     button.textContent = '✓ تمت الإضافة';
+    showNotification('✅ تم إضافة المنتج للعربة');
+
+    // Open cart with animation
+    requestAnimationFrame(() => {
+      openCart();
+      // Force a reflow to ensure the animation plays
+      cartMenu.offsetHeight;
+    });
+
+    // Update cart contents
+    await loadCart();
+
+    // Reset button after delay
     setTimeout(() => {
       button.disabled = false;
-      button.textContent = 'أضف للعربة';
+      button.textContent = originalText;
     }, 2000);
-
-    showNotification('✅ تم إضافة المنتج للعربة');
-    await loadCart(); // Refresh cart display
 
   } catch (error) {
     console.error('Error adding to cart:', error);
     showNotification('❌ حدث خطأ أثناء الإضافة للعربة', 'error');
-    closeCartMenu();
+    button.disabled = false;
+    button.textContent = originalText;
   }
 }
 
@@ -195,50 +223,9 @@ function updateCartCount(count) {
   if (cartToggle) cartToggle.style.display = count > 0 ? 'flex' : 'none';
 }
 
-// Polling Functions
-function startFilterPolling() {
-  setInterval(async () => {
-    try {
-      const [filterResponse, productsResponse] = await Promise.all([
-        fetch(`${API_URL}/filter`),
-        fetch(`${API_URL}/products`)
-      ]);
-
-      if (!filterResponse.ok || !productsResponse.ok) {
-        throw new Error('Filter or products fetch failed');
-      }
-
-      const filter = await filterResponse.json();
-      const products = await productsResponse.json();
-
-      // Update filter UI without triggering change event
-      if (categoryFilter && categoryFilter.value !== filter.category) {
-        categoryFilter.value = filter.category || '';
-      }
-      if (brandFilter && brandFilter.value !== filter.brand) {
-        brandFilter.value = filter.brand || '';
-      }
-
-      // Update products display
-      displayProducts(products);
-    } catch (error) {
-      console.error('Error polling filters:', error);
-    }
-  }, 2000);
-}
-
+// Cart Polling
 function startCartPolling() {
-  setInterval(async () => {
-    try {
-      const response = await fetch(`${API_URL}/cart`);
-      if (!response.ok) throw new Error('Cart fetch failed');
-      const items = await response.json();
-      updateCartDisplay(items);
-      updateCartCount(items.length);
-    } catch (error) {
-      console.error('Error polling cart:', error);
-    }
-  }, 2000);
+  setInterval(loadCart, 2000);
 }
 
 function showNotification(message, type = 'success') {
@@ -255,16 +242,20 @@ async function removeFromCart(productName) {
     const items = await response.json();
     const updatedItems = items.filter(item => item.name !== productName);
     
-    await fetch(`${API_URL}/cart/batch`, {
+    const updateResponse = await fetch(`${API_URL}/cart/batch`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json'
       },
       body: JSON.stringify(updatedItems)
     });
+
+    if (!updateResponse.ok) {
+      throw new Error('Failed to remove item from cart');
+    }
     
     showNotification('✅ تم حذف المنتج من العربة');
-    loadCart();
+    await loadCart();
   } catch (error) {
     console.error('Error removing from cart:', error);
     showNotification('❌ حدث خطأ أثناء حذف المنتج', 'error');
@@ -273,11 +264,16 @@ async function removeFromCart(productName) {
 
 async function completePurchase() {
   try {
-    await fetch(`${API_URL}/cart/reset`, {
+    const response = await fetch(`${API_URL}/cart/reset`, {
       method: 'POST'
     });
+
+    if (!response.ok) {
+      throw new Error('Failed to complete purchase');
+    }
+
     showNotification('✅ تم إتمام عملية الشراء بنجاح!');
-    loadCart();
+    await loadCart();
     closeCartMenu();
   } catch (error) {
     console.error('Error completing purchase:', error);

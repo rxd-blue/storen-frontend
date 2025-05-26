@@ -19,82 +19,57 @@ if (categoryFilter && brandFilter) {
 }
 
 cartToggle.addEventListener('click', () => {
-  cartMenu.classList.add('active');
-  cartOverlay.classList.add('active');
-  loadCart(); // Refresh cart when opened
+  openCart();
 });
 
-closeCart.addEventListener('click', () => {
-  cartMenu.classList.remove('active');
-  cartOverlay.classList.remove('active');
-});
-
-cartOverlay.addEventListener('click', () => {
-  cartMenu.classList.remove('active');
-  cartOverlay.classList.remove('active');
-});
-
+closeCart.addEventListener('click', closeCartMenu);
+cartOverlay.addEventListener('click', closeCartMenu);
 document.getElementById('completePurchase').addEventListener('click', completePurchase);
 
 // Initialize the page
 document.addEventListener('DOMContentLoaded', () => {
+  loadInitialProducts();
   startFilterPolling();
   startCartPolling();
   loadCart(); // Initial cart load
 });
 
-// Filter Functions
-function updateFilters() {
-  const filter = {
-    category: categoryFilter.value,
-    brand: brandFilter.value
-  };
-  
-  sendFiltersToAPI(filter);
-  applyFilters(filter);
+// Cart Functions
+function openCart() {
+  cartMenu.classList.add('active');
+  cartOverlay.classList.add('active');
+  loadCart(); // Refresh cart when opened
 }
 
-async function sendFiltersToAPI(filter) {
+function closeCartMenu() {
+  cartMenu.classList.remove('active');
+  cartOverlay.classList.remove('active');
+}
+
+async function loadInitialProducts() {
   try {
-    await fetch(`${API_URL}/filter`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify(filter)
-    });
+    const response = await fetch(`${API_URL}/products`);
+    if (!response.ok) throw new Error('Failed to fetch products');
+    const products = await response.json();
+    displayProducts(products);
   } catch (error) {
-    console.error('Error sending filters:', error);
+    console.error('Error loading products:', error);
+    showNotification('❌ حدث خطأ أثناء تحميل المنتجات', 'error');
   }
 }
 
-function applyFilters(filter) {
-  const products = document.querySelectorAll('.product');
-  products.forEach(product => {
-    const matchesCategory = !filter.category || product.dataset.category === filter.category;
-    const matchesBrand = !filter.brand || product.dataset.brand === filter.brand;
-    
-    if (matchesCategory && matchesBrand) {
-      product.style.display = 'block';
-      product.style.opacity = '1';
-      product.style.transform = 'translateY(0)';
-    } else {
-      product.style.opacity = '0';
-      product.style.transform = 'translateY(20px)';
-      setTimeout(() => {
-        product.style.display = 'none';
-      }, 300);
-    }
-  });
+function displayProducts(products) {
+  if (!productsGrid) return;
   
-  // Update filter UI
-  if (categoryFilter) categoryFilter.value = filter.category || '';
-  if (brandFilter) brandFilter.value = filter.brand || '';
-  
-  showNotification(`تم تطبيق الفلتر: ${filter.category || 'كل الفئات'} - ${filter.brand || 'كل الماركات'}`);
+  productsGrid.innerHTML = products.map(product => `
+    <div class="product" data-category="${product.category || ''}" data-brand="${product.brand || ''}">
+      <h3>${product.name}</h3>
+      <p>${product.details || ''}</p>
+      <button onclick="addToCart(this)">أضف للعربة</button>
+    </div>
+  `).join('');
 }
 
-// Cart Functions
 async function addToCart(button) {
   const product = button.closest('.product');
   const item = {
@@ -104,8 +79,7 @@ async function addToCart(button) {
 
   try {
     // Show cart menu immediately
-    cartMenu.classList.add('active');
-    cartOverlay.classList.add('active');
+    openCart();
 
     const response = await fetch(`${API_URL}/cart/add`, {
       method: 'POST',
@@ -120,29 +94,19 @@ async function addToCart(button) {
     }
 
     showNotification('✅ تم إضافة المنتج للعربة');
-    loadCart(); // Refresh cart display
+    await loadCart(); // Refresh cart display
 
   } catch (error) {
     console.error('Error adding to cart:', error);
     showNotification('❌ حدث خطأ أثناء الإضافة للعربة', 'error');
-    
-    // Hide cart menu if there was an error
-    cartMenu.classList.remove('active');
-    cartOverlay.classList.remove('active');
+    closeCartMenu();
   }
-}
-
-function showNotification(message, type = 'success') {
-  const notification = document.createElement('div');
-  notification.className = `notification ${type}`;
-  notification.textContent = message;
-  document.body.appendChild(notification);
-  setTimeout(() => notification.remove(), 3000);
 }
 
 async function loadCart() {
   try {
     const response = await fetch(`${API_URL}/cart`);
+    if (!response.ok) throw new Error('Failed to load cart');
     const items = await response.json();
     updateCartDisplay(items);
     updateCartCount(items.length);
@@ -174,8 +138,91 @@ function updateCartDisplay(items) {
 }
 
 function updateCartCount(count) {
-  cartCount.textContent = count;
-  cartToggle.style.display = count > 0 ? 'flex' : 'none';
+  if (cartCount) cartCount.textContent = count;
+  if (cartToggle) cartToggle.style.display = count > 0 ? 'flex' : 'none';
+}
+
+// Filter Functions
+async function updateFilters() {
+  const filter = {
+    category: categoryFilter.value,
+    brand: brandFilter.value
+  };
+  
+  try {
+    await sendFiltersToAPI(filter);
+    const response = await fetch(`${API_URL}/products`);
+    if (!response.ok) throw new Error('Failed to fetch filtered products');
+    const products = await response.json();
+    displayProducts(products);
+  } catch (error) {
+    console.error('Error updating filters:', error);
+    showNotification('❌ حدث خطأ أثناء تطبيق الفلتر', 'error');
+  }
+}
+
+async function sendFiltersToAPI(filter) {
+  const response = await fetch(`${API_URL}/filter`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify(filter)
+  });
+  
+  if (!response.ok) {
+    throw new Error('Failed to send filters');
+  }
+}
+
+// Polling Functions
+function startFilterPolling() {
+  setInterval(async () => {
+    try {
+      const [filterResponse, productsResponse] = await Promise.all([
+        fetch(`${API_URL}/filter`),
+        fetch(`${API_URL}/products`)
+      ]);
+
+      if (!filterResponse.ok || !productsResponse.ok) {
+        throw new Error('Filter or products fetch failed');
+      }
+
+      const filter = await filterResponse.json();
+      const products = await productsResponse.json();
+
+      // Update filter UI
+      if (categoryFilter) categoryFilter.value = filter.category || '';
+      if (brandFilter) brandFilter.value = filter.brand || '';
+
+      // Update products display
+      displayProducts(products);
+    } catch (error) {
+      console.error('Error polling filters:', error);
+    }
+  }, 2000);
+}
+
+function startCartPolling() {
+  setInterval(async () => {
+    try {
+      const response = await fetch(`${API_URL}/cart`);
+      if (!response.ok) throw new Error('Cart fetch failed');
+      const items = await response.json();
+      updateCartDisplay(items);
+      updateCartCount(items.length);
+    } catch (error) {
+      console.error('Error polling cart:', error);
+    }
+  }, 2000);
+}
+
+function showNotification(message, type = 'success') {
+  const notification = document.createElement('div');
+  notification.className = `notification ${type}`;
+  notification.textContent = message;
+  document.body.appendChild(notification);
+  setTimeout(() => notification.remove(), 3000);
 }
 
 async function removeFromCart(productName) {
@@ -207,40 +254,9 @@ async function completePurchase() {
     });
     showNotification('✅ تم إتمام عملية الشراء بنجاح!');
     loadCart();
-    
-    // Close cart menu after purchase
-    cartMenu.classList.remove('active');
-    cartOverlay.classList.remove('active');
+    closeCartMenu();
   } catch (error) {
     console.error('Error completing purchase:', error);
     showNotification('❌ حدث خطأ أثناء إتمام عملية الشراء', 'error');
   }
-}
-
-// Polling Functions
-function startFilterPolling() {
-  setInterval(async () => {
-    try {
-      const response = await fetch(`${API_URL}/filter`);
-      if (!response.ok) throw new Error('Filter fetch failed');
-      const filter = await response.json();
-      applyFilters(filter);
-    } catch (error) {
-      console.error('Error polling filters:', error);
-    }
-  }, 2000);
-}
-
-function startCartPolling() {
-  setInterval(async () => {
-    try {
-      const response = await fetch(`${API_URL}/cart`);
-      if (!response.ok) throw new Error('Cart fetch failed');
-      const items = await response.json();
-      updateCartDisplay(items);
-      updateCartCount(items.length);
-    } catch (error) {
-      console.error('Error polling cart:', error);
-    }
-  }, 2000);
 } 

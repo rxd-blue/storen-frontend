@@ -5,7 +5,12 @@ const API_URL = 'https://special-catnip-hawthorn.glitch.me/api';
 const categoryFilter = document.getElementById('categoryFilter');
 const brandFilter = document.getElementById('brandFilter');
 const productsGrid = document.querySelector('.products-grid');
-const cartItems = document.getElementById('cart-items');
+const cartMenu = document.getElementById('cartMenu');
+const cartOverlay = document.getElementById('cartOverlay');
+const cartItems = document.getElementById('cartItems');
+const cartCount = document.getElementById('cartCount');
+const cartToggle = document.getElementById('cartToggle');
+const closeCart = document.getElementById('closeCart');
 
 // Event Listeners
 if (categoryFilter && brandFilter) {
@@ -13,16 +18,29 @@ if (categoryFilter && brandFilter) {
   brandFilter.addEventListener('change', updateFilters);
 }
 
+cartToggle.addEventListener('click', () => {
+  cartMenu.classList.add('active');
+  cartOverlay.classList.add('active');
+  loadCart(); // Refresh cart when opened
+});
+
+closeCart.addEventListener('click', () => {
+  cartMenu.classList.remove('active');
+  cartOverlay.classList.remove('active');
+});
+
+cartOverlay.addEventListener('click', () => {
+  cartMenu.classList.remove('active');
+  cartOverlay.classList.remove('active');
+});
+
+document.getElementById('completePurchase').addEventListener('click', completePurchase);
+
 // Initialize the page
 document.addEventListener('DOMContentLoaded', () => {
-  if (window.location.pathname.includes('cart.html')) {
-    loadCart();
-    startCartPolling(); // Start polling cart in cart page
-  } else {
-    checkCartAndRedirect();
-    startFilterPolling();
-    startCartPolling(); // Start polling cart in main page
-  }
+  startFilterPolling();
+  startCartPolling();
+  loadCart(); // Initial cart load
 });
 
 // Filter Functions
@@ -73,12 +91,7 @@ function applyFilters(filter) {
   if (categoryFilter) categoryFilter.value = filter.category || '';
   if (brandFilter) brandFilter.value = filter.brand || '';
   
-  // Show feedback to user
-  const feedbackMsg = document.createElement('div');
-  feedbackMsg.className = 'filter-feedback';
-  feedbackMsg.textContent = `تم تطبيق الفلتر: ${filter.category || 'كل الفئات'} - ${filter.brand || 'كل الماركات'}`;
-  document.body.appendChild(feedbackMsg);
-  setTimeout(() => feedbackMsg.remove(), 3000);
+  showNotification(`تم تطبيق الفلتر: ${filter.category || 'كل الفئات'} - ${filter.brand || 'كل الماركات'}`);
 }
 
 // Cart Functions
@@ -97,17 +110,18 @@ async function addToCart(button) {
       },
       body: JSON.stringify(item)
     });
-    
-    if (response.ok) {
-      showNotification('✅ تم إضافة المنتج للعربة');
-      // Wait for the notification to be visible
-      setTimeout(() => {
-        // Redirect to cart page
-        window.location.href = 'cart.html';
-      }, 1000);
-    } else {
+
+    if (!response.ok) {
       throw new Error('Failed to add to cart');
     }
+
+    showNotification('✅ تم إضافة المنتج للعربة');
+    loadCart(); // Refresh cart display
+    
+    // Show cart menu
+    cartMenu.classList.add('active');
+    cartOverlay.classList.add('active');
+
   } catch (error) {
     console.error('Error adding to cart:', error);
     showNotification('❌ حدث خطأ أثناء الإضافة للعربة', 'error');
@@ -127,6 +141,7 @@ async function loadCart() {
     const response = await fetch(`${API_URL}/cart`);
     const items = await response.json();
     updateCartDisplay(items);
+    updateCartCount(items.length);
   } catch (error) {
     console.error('Error loading cart:', error);
     if (cartItems) {
@@ -136,7 +151,7 @@ async function loadCart() {
 }
 
 function updateCartDisplay(items) {
-  if (!cartItems) return; // Guard clause if not in cart page
+  if (!cartItems) return;
   
   if (!items.length) {
     cartItems.innerHTML = '<p class="empty-cart">العربة فارغة</p>';
@@ -152,6 +167,11 @@ function updateCartDisplay(items) {
       <button onclick="removeFromCart('${item.name}')" class="remove-btn">حذف</button>
     </div>
   `).join('');
+}
+
+function updateCartCount(count) {
+  cartCount.textContent = count;
+  cartToggle.style.display = count > 0 ? 'flex' : 'none';
 }
 
 async function removeFromCart(productName) {
@@ -182,9 +202,11 @@ async function completePurchase() {
       method: 'POST'
     });
     showNotification('✅ تم إتمام عملية الشراء بنجاح!');
-    setTimeout(() => {
-      window.location.href = 'index.html';
-    }, 1000);
+    loadCart();
+    
+    // Close cart menu after purchase
+    cartMenu.classList.remove('active');
+    cartOverlay.classList.remove('active');
   } catch (error) {
     console.error('Error completing purchase:', error);
     showNotification('❌ حدث خطأ أثناء إتمام عملية الشراء', 'error');
@@ -192,74 +214,29 @@ async function completePurchase() {
 }
 
 // Polling Functions
-async function checkCartAndRedirect() {
-  try {
-    const response = await fetch(`${API_URL}/cart`);
-    const cart = await response.json();
-    if (cart.length > 0) {
-      window.location.href = 'cart.html';
-    }
-  } catch (error) {
-    console.error('Error checking cart:', error);
-  }
-}
-
-let lastFilter = {};
-async function pollFilters() {
-  try {
-    const response = await fetch(`${API_URL}/filter`);
-    if (!response.ok) {
-      throw new Error(`HTTP error! status: ${response.status}`);
-    }
-    const filter = await response.json();
-    
-    if (JSON.stringify(filter) !== JSON.stringify(lastFilter)) {
-      console.log('New filter received:', filter);
-      lastFilter = filter;
-      applyFilters(filter);
-    }
-  } catch (error) {
-    console.error('Error polling filters:', error);
-  }
-}
-
 function startFilterPolling() {
-  setInterval(pollFilters, 2000);
+  setInterval(async () => {
+    try {
+      const response = await fetch(`${API_URL}/filter`);
+      if (!response.ok) throw new Error('Filter fetch failed');
+      const filter = await response.json();
+      applyFilters(filter);
+    } catch (error) {
+      console.error('Error polling filters:', error);
+    }
+  }, 2000);
 }
 
-// Add cart polling function
 function startCartPolling() {
   setInterval(async () => {
     try {
       const response = await fetch(`${API_URL}/cart`);
       if (!response.ok) throw new Error('Cart fetch failed');
       const items = await response.json();
-      
-      // If we're in cart page, update the display
-      if (window.location.pathname.includes('cart.html')) {
-        updateCartDisplay(items);
-      } else {
-        // If in main page, show notification for new items
-        if (items.length > 0) {
-          updateCartBadge(items.length);
-        }
-      }
+      updateCartDisplay(items);
+      updateCartCount(items.length);
     } catch (error) {
       console.error('Error polling cart:', error);
     }
   }, 2000);
-}
-
-function updateCartBadge(itemCount) {
-  let badge = document.querySelector('.cart-badge');
-  if (!badge) {
-    badge = document.createElement('div');
-    badge.className = 'cart-badge';
-    const cartLink = document.querySelector('.cart-link');
-    if (cartLink) {
-      cartLink.appendChild(badge);
-    }
-  }
-  badge.textContent = itemCount;
-  badge.style.display = itemCount > 0 ? 'block' : 'none';
 } 

@@ -103,6 +103,10 @@ async function addToCart(button) {
   };
 
   try {
+    // Show cart menu immediately
+    cartMenu.classList.add('active');
+    cartOverlay.classList.add('active');
+
     const response = await fetch(`${API_URL}/cart/add`, {
       method: 'POST',
       headers: {
@@ -117,14 +121,14 @@ async function addToCart(button) {
 
     showNotification('✅ تم إضافة المنتج للعربة');
     loadCart(); // Refresh cart display
-    
-    // Show cart menu
-    cartMenu.classList.add('active');
-    cartOverlay.classList.add('active');
 
   } catch (error) {
     console.error('Error adding to cart:', error);
     showNotification('❌ حدث خطأ أثناء الإضافة للعربة', 'error');
+    
+    // Hide cart menu if there was an error
+    cartMenu.classList.remove('active');
+    cartOverlay.classList.remove('active');
   }
 }
 
